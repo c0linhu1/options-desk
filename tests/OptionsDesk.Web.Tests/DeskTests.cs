@@ -177,8 +177,31 @@ public class ApiTests : IDisposable
     public async Task ExpiredOptionsCanNotBeBooked()
     {
         var client = await _factory.TradingClientAsync();
-        _factory.Clock.Today = Front.AddDays(1);
+        _factory.Clock.Today = Front.AddDays(3); // the Monday after expiry, so the trade date is a business day
         var response = await client.BookAsync(Call(230), "Buy", 1, 1m);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("not a listed expiry", body.GetProperty("problems")[0].GetString());
+    }
+
+    [Theory]
+    [InlineData("2026-10-15", "in the future")]
+    [InlineData("2026-10-13", "before the earliest allowed date")]
+    [InlineData("2026-10-11", "not a business day")]
+    public async Task TradeDateMustBeToday(string tradeDate, string expected)
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DateOnly.Parse(tradeDate));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(expected, body.GetProperty("problems")[0].GetString());
+    }
+
+    [Fact]
+    public async Task TodaysDateIsAccepted()
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DeskFactory.AsOf);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 }

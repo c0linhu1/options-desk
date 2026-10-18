@@ -7,6 +7,9 @@ public class DeskOptions
     public int StrikesEachSide { get; set; } = 8;
     public string DefaultTrader { get; set; } = "trader1";
     public DateOnly? ValuationDate { get; set; }
+
+    /// <summary>How many business days back a trade may be dated. 0 means trades must be dated today.</summary>
+    public int MaxBackdateBusinessDays { get; set; }
 }
 
 /// <summary>The date positions are valued and options are priced as of.</summary>
