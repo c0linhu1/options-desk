@@ -1,0 +1,61 @@
+@model TradesViewModel
+@{
+    ViewData["Title"] = "Trades";
+}
+
+<div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+    <h1 class="h4 mb-0">Trades</h1>
+    <form method="get" class="d-flex gap-2">
+        <select class="form-select form-select-sm" name="underlying">
+            <option value="">All underlyings</option>
+            @foreach (var s in Model.Underlyings)
+            {
+                <option value="@s" selected="@(s == Model.Underlying)">@s</option>
+            }
+        </select>
+        <input class="form-control form-control-sm" name="trader" placeholder="Trader" value="@Model.Trader" />
+        <button class="btn btn-sm btn-outline-primary" type="submit">Filter</button>
+    </form>
+</div>
+
+@if (Model.Trades.Count == 0)
+{
+    <p class="text-muted">No trades.</p>
+}
+else
+{
+    <table class="table table-sm table-hover table-desk">
+        <thead>
+            <tr>
+                <th data-sort="num">#</th>
+                <th data-sort="text">Symbol</th>
+                <th data-sort="text">Side</th>
+                <th data-sort="num" class="num">Quantity</th>
+                <th data-sort="num" class="num">Price</th>
+                <th data-sort="num" class="num">Notional</th>
+                <th data-sort="text">Trader</th>
+                <th data-sort="text">Account</th>
+                <th data-sort="text">Trade date</th>
+                <th data-sort="text">Settles</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var t in Model.Trades)
+            {
+                var notional = t.Quantity * t.Price * t.Multiplier;
+                <tr>
+                    <td>@t.Id</td>
+                    <td class="font-monospace">@t.Symbol</td>
+                    <td class="side-@t.Side">@t.Side</td>
+                    <td class="num">@t.Quantity.ToString("N0")</td>
+                    <td class="num">@Fmt.Price(t.Price)</td>
+                    <td class="num" data-value="@notional">@Fmt.Money(notional)</td>
+                    <td>@t.Trader</td>
+                    <td>@t.Account</td>
+                    <td>@t.TradeDate.ToString("yyyy-MM-dd")</td>
+                    <td>@t.SettleDate.ToString("yyyy-MM-dd")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

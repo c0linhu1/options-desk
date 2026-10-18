@@ -1,0 +1,38 @@
+﻿@model DashboardViewModel
+@{
+    ViewData["Title"] = "Underlyings";
+}
+
+<div class="d-flex justify-content-between align-items-baseline">
+    <h1 class="h4">Underlyings</h1>
+    <span class="text-muted">Valued as of @Model.AsOf.ToString("yyyy-MM-dd")</span>
+</div>
+
+<table class="table table-sm table-hover table-desk">
+    <thead>
+        <tr>
+            <th data-sort="text">Symbol</th>
+            <th data-sort="text">Name</th>
+            <th data-sort="text">Sector</th>
+            <th data-sort="num" class="num">Spot</th>
+            <th data-sort="num" class="num">ATM vol</th>
+            <th data-sort="num" class="num">Div yield</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var row in Model.Underlyings)
+        {
+            var u = row.Underlying;
+            <tr>
+                <td><strong>@u.Symbol</strong></td>
+                <td>@u.Name</td>
+                <td>@u.Sector</td>
+                <td class="num">@Fmt.Price(u.Spot)</td>
+                <td class="num" title="@row.FrontExpiry.ToString("yyyy-MM-dd") expiry">@Fmt.Pct(row.AtmVol)</td>
+                <td class="num">@Fmt.Pct(u.DividendYield, 2)</td>
+                <td><a asp-controller="Chain" asp-action="Index" asp-route-symbol="@u.Symbol">Chain</a></td>
+            </tr>
+        }
+    </tbody>
+</table>

@@ -1,0 +1,50 @@
+<form id="ticket" class="card ticket" autocomplete="off">
+    <div class="card-header">Trade ticket</div>
+    <div class="card-body">
+        @Html.AntiForgeryToken()
+        <div class="mb-2">
+            <label class="form-label small" for="ticket-symbol">Symbol</label>
+            <input class="form-control form-control-sm font-monospace" id="ticket-symbol" name="symbol" required />
+        </div>
+        <div class="btn-group w-100 mb-2" role="group">
+            <input type="radio" class="btn-check" name="side" id="side-buy" value="Buy" checked />
+            <label class="btn btn-sm btn-outline-success" for="side-buy">Buy</label>
+            <input type="radio" class="btn-check" name="side" id="side-sell" value="Sell" />
+            <label class="btn btn-sm btn-outline-danger" for="side-sell">Sell</label>
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col">
+                <label class="form-label small" for="ticket-quantity">Quantity</label>
+                <input class="form-control form-control-sm" id="ticket-quantity" name="quantity" type="number" min="1"
+                       step="1" value="10" required />
+            </div>
+            <div class="col">
+                <label class="form-label small" for="ticket-price">Price</label>
+                <input class="form-control form-control-sm" id="ticket-price" name="price" type="number" min="0.01"
+                       step="0.01" required />
+            </div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small" for="ticket-account">Account</label>
+            <input class="form-control form-control-sm" id="ticket-account" name="account" value="ACCT1" required />
+        </div>
+
+        <dl class="row small mb-2" id="ticket-analytics" hidden>
+            <dt class="col-6">Implied vol</dt>
+            <dd class="col-6 text-end" data-field="vol"></dd>
+            <dt class="col-6">Delta</dt>
+            <dd class="col-6 text-end" data-field="delta"></dd>
+            <dt class="col-6">Vega</dt>
+            <dd class="col-6 text-end" data-field="vega"></dd>
+            <dt class="col-6">Theta / day</dt>
+            <dd class="col-6 text-end" data-field="theta"></dd>
+            <dt class="col-6">Notional</dt>
+            <dd class="col-6 text-end" data-field="notional"></dd>
+        </dl>
+
+        <div class="alert alert-danger small py-2" id="ticket-errors" hidden></div>
+        <div class="alert alert-success small py-2" id="ticket-success" hidden></div>
+
+        <button type="submit" class="btn btn-primary btn-sm w-100" id="ticket-submit">Book trade</button>
+    </div>
+</form>

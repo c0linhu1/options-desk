@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/*.db
+src/OptionsDesk.Web/wwwroot/js/
+tests/
+.git/
+.github/
+.vs/

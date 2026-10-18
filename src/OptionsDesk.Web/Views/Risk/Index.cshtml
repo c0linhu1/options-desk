@@ -1,0 +1,108 @@
+@model RiskViewModel
+@{
+    ViewData["Title"] = "Risk";
+}
+
+<h1 class="h4">Risk</h1>
+
+@if (Model.Exposures.Count == 0)
+{
+    <p class="text-muted">The book is flat.</p>
+    return;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="card card-body"><div class="text-muted small">Net delta (shares)</div><div class="fs-5">@Fmt.Num(Model.Totals.Delta)</div></div></div>
+    <div class="col-md-3"><div class="card card-body"><div class="text-muted small">Gamma (shares / $1)</div><div class="fs-5">@Fmt.Num(Model.Totals.Gamma, 1)</div></div></div>
+    <div class="col-md-3">
+        <div class="card card-body">
+            <div class="text-muted small">Vega ($ / vol pt) &middot; limit @Fmt.Money(Model.Limits.MaxPortfolioVega)</div>
+            <div class="fs-5 @Fmt.Sign(Model.Totals.Vega)">@Fmt.Money(Model.Totals.Vega)</div>
+        </div>
+    </div>
+    <div class="col-md-3"><div class="card card-body"><div class="text-muted small">Theta ($ / day)</div><div class="fs-5 @Fmt.Sign(Model.Totals.Theta)">@Fmt.Money(Model.Totals.Theta)</div></div></div>
+</div>
+
+<h2 class="h6">By underlying</h2>
+<table class="table table-sm table-desk">
+    <thead>
+        <tr>
+            <th>Underlying</th>
+            <th class="num">Delta</th>
+            <th class="num">Delta limit used</th>
+            <th class="num">Gamma</th>
+            <th class="num">Vega</th>
+            <th class="num">Theta</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var (underlying, g) in Model.ByUnderlying.OrderBy(kv => kv.Key))
+        {
+            <tr>
+                <td>@underlying</td>
+                <td class="num">@Fmt.Num(g.Delta)</td>
+                <td class="num">@Fmt.Pct(Math.Abs(g.Delta) / Model.Limits.MaxUnderlyingDelta, 0)</td>
+                <td class="num">@Fmt.Num(g.Gamma, 1)</td>
+                <td class="num">@Fmt.Money(g.Vega)</td>
+                <td class="num">@Fmt.Money(g.Theta)</td>
+                <td><a asp-action="Index" asp-route-underlying="@underlying">Scenarios</a></td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@if (Model.Scenarios is { } s)
+{
+    <h2 class="h6 mt-4">@s.Underlying scenario P&amp;L <small class="text-muted">spot @Fmt.Price(s.Spot)</small></h2>
+    <table class="table table-sm table-bordered table-desk scenario w-auto">
+        <thead>
+            <tr>
+                <th>Vol \ Spot</th>
+                @foreach (var ds in s.SpotShocks)
+                {
+                    <th class="num">@(ds > 0 ? "+" : "")@Fmt.Pct(ds, 0)</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @for (var i = 0; i < s.VolShocks.Count; i++)
+            {
+                <tr>
+                    <th>@(s.VolShocks[i] > 0 ? "+" : "")@Fmt.Num(s.VolShocks[i] * 100) pts</th>
+                    @foreach (var pnl in s.Pnl[i])
+                    {
+                        <td class="@Fmt.Sign(Math.Round(pnl))">@Fmt.Money(pnl)</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h2 class="h6 mt-4">Positions</h2>
+<table class="table table-sm table-desk">
+    <thead>
+        <tr>
+            <th data-sort="text">Symbol</th>
+            <th data-sort="num" class="num">Quantity</th>
+            <th data-sort="num" class="num">Delta</th>
+            <th data-sort="num" class="num">Gamma</th>
+            <th data-sort="num" class="num">Vega</th>
+            <th data-sort="num" class="num">Theta</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var e in Model.Exposures)
+        {
+            <tr>
+                <td class="font-monospace">@e.Symbol</td>
+                <td class="num">@e.Quantity.ToString("N0")</td>
+                <td class="num" data-value="@e.Delta">@Fmt.Num(e.Delta)</td>
+                <td class="num" data-value="@e.Gamma">@Fmt.Num(e.Gamma, 1)</td>
+                <td class="num" data-value="@e.Vega">@Fmt.Money(e.Vega)</td>
+                <td class="num" data-value="@e.Theta">@Fmt.Money(e.Theta)</td>
+            </tr>
+        }
+    </tbody>
+</table>

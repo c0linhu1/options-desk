@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OptionsDesk.Data/OptionsDesk.Data.csproj" />
+    <Project Path="src/OptionsDesk.Pricing/OptionsDesk.Pricing.csproj" />
+    <Project Path="src/OptionsDesk.Web/OptionsDesk.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OptionsDesk.Pricing.Tests/OptionsDesk.Pricing.Tests.csproj" />
+    <Project Path="tests/OptionsDesk.Web.Tests/OptionsDesk.Web.Tests.csproj" />
+  </Folder>
+</Solution>

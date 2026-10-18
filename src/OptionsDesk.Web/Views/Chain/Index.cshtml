@@ -1,0 +1,91 @@
+@model ChainViewModel
+@{
+    ViewData["Title"] = $"{Model.Underlying.Symbol} chain";
+    var u = Model.Underlying;
+    var atmStrike = Model.Rows.MinBy(r => Math.Abs(r.Strike - u.Spot))?.Strike;
+}
+
+<div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+    <h1 class="h4 mb-0">@u.Symbol <small class="text-muted">@u.Name</small></h1>
+    <span>Spot <strong>@Fmt.Price(u.Spot)</strong></span>
+    <form method="get" class="d-flex gap-2" id="chain-picker">
+        <select class="form-select form-select-sm" name="symbol" onchange="location.href = '/Chain/' + this.value">
+            @foreach (var other in Model.AllUnderlyings)
+            {
+                <option value="@other.Symbol" selected="@(other.Symbol == u.Symbol)">@other.Symbol</option>
+            }
+        </select>
+    </form>
+    <button type="button" class="btn btn-sm btn-outline-secondary" data-stock="@u.Symbol" data-price="@u.Spot">
+        Trade @u.Symbol stock
+    </button>
+</div>
+
+<ul class="nav nav-tabs mb-2">
+    @foreach (var e in Model.Expiries)
+    {
+        <li class="nav-item">
+            <a class="nav-link @(e == Model.Expiry ? "active" : "")" href="/Chain/@u.Symbol?expiry=@e.ToString("yyyy-MM-dd")">
+                @e.ToString("MMM dd")
+            </a>
+        </li>
+    }
+</ul>
+<p class="text-muted small">
+    @Model.Expiry.ToString("yyyy-MM-dd") &middot; @Fmt.Num(Model.TimeToExpiry * 365) days &middot;
+    click a bid to sell or an ask to buy
+</p>
+
+<div class="row">
+    <div class="col-xl-9">
+        <table class="table table-sm table-desk chain">
+            <thead>
+                <tr>
+                    <th colspan="5" class="text-center">Calls</th>
+                    <th></th>
+                    <th colspan="5" class="text-center">Puts</th>
+                </tr>
+                <tr>
+                    <th class="num">Delta</th>
+                    <th class="num">Vega</th>
+                    <th class="num">IV</th>
+                    <th class="num">Bid</th>
+                    <th class="num">Ask</th>
+                    <th class="text-center">Strike</th>
+                    <th class="num">Bid</th>
+                    <th class="num">Ask</th>
+                    <th class="num">IV</th>
+                    <th class="num">Vega</th>
+                    <th class="num">Delta</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    var callItm = row.Strike < u.Spot ? "itm" : "";
+                    var putItm = row.Strike > u.Spot ? "itm" : "";
+                    <tr class="@(row.Strike == atmStrike ? "atm" : "")">
+                        <td class="num @callItm">@Fmt.Greek(row.Call.Delta)</td>
+                        <td class="num @callItm">@Fmt.Greek(row.Call.Vega)</td>
+                        <td class="num @callItm">@Fmt.Pct(row.Call.Vol)</td>
+                        <td class="num @callItm" data-quote data-symbol="@row.Call.Contract.Symbol" data-side="Sell" data-price="@row.Call.Bid">@Fmt.Price(row.Call.Bid)</td>
+                        <td class="num @callItm" data-quote data-symbol="@row.Call.Contract.Symbol" data-side="Buy" data-price="@row.Call.Ask">@Fmt.Price(row.Call.Ask)</td>
+                        <td class="strike">@row.Strike.ToString("0.##")</td>
+                        <td class="num @putItm" data-quote data-symbol="@row.Put.Contract.Symbol" data-side="Sell" data-price="@row.Put.Bid">@Fmt.Price(row.Put.Bid)</td>
+                        <td class="num @putItm" data-quote data-symbol="@row.Put.Contract.Symbol" data-side="Buy" data-price="@row.Put.Ask">@Fmt.Price(row.Put.Ask)</td>
+                        <td class="num @putItm">@Fmt.Pct(row.Put.Vol)</td>
+                        <td class="num @putItm">@Fmt.Greek(row.Put.Vega)</td>
+                        <td class="num @putItm">@Fmt.Greek(row.Put.Delta)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="col-xl-3">
+        <partial name="_TradeTicket" />
+    </div>
+</div>
+
+@section Scripts {
+    <script type="module" src="~/js/ticket.js" asp-append-version="true"></script>
+}

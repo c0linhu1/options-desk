@@ -1,0 +1,51 @@
+@model PositionsViewModel
+@{
+    ViewData["Title"] = "Positions";
+}
+
+<h1 class="h4">Positions</h1>
+
+@if (Model.Positions.Count == 0)
+{
+    <p class="text-muted">No positions. Book a trade from the <a asp-controller="Chain" asp-action="Index">chain</a>.</p>
+}
+else
+{
+    <table class="table table-sm table-hover table-desk">
+        <thead>
+            <tr>
+                <th data-sort="text">Underlying</th>
+                <th data-sort="text">Symbol</th>
+                <th data-sort="num" class="num">Quantity</th>
+                <th data-sort="num" class="num">Avg price</th>
+                <th data-sort="num" class="num">Mark</th>
+                <th data-sort="num" class="num">Market value</th>
+                <th data-sort="num" class="num">Unrealized</th>
+                <th data-sort="num" class="num">Realized</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in Model.Positions)
+            {
+                <tr>
+                    <td>@p.Underlying</td>
+                    <td class="font-monospace">@p.Symbol</td>
+                    <td class="num">@p.Quantity.ToString("N0")</td>
+                    <td class="num">@Fmt.Price(p.AveragePrice)</td>
+                    <td class="num">@Fmt.Price(p.Mark)</td>
+                    <td class="num" data-value="@p.MarketValue">@Fmt.Money(p.MarketValue)</td>
+                    <td class="num @Fmt.Sign(p.UnrealizedPnl)" data-value="@p.UnrealizedPnl">@Fmt.Money(p.UnrealizedPnl)</td>
+                    <td class="num @Fmt.Sign(p.RealizedPnl)" data-value="@p.RealizedPnl">@Fmt.Money(p.RealizedPnl)</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr class="fw-semibold">
+                <td colspan="5">Total</td>
+                <td class="num">@Fmt.Money(Model.TotalMarketValue)</td>
+                <td class="num @Fmt.Sign(Model.TotalUnrealized)">@Fmt.Money(Model.TotalUnrealized)</td>
+                <td class="num @Fmt.Sign(Model.TotalRealized)">@Fmt.Money(Model.TotalRealized)</td>
+            </tr>
+        </tfoot>
+    </table>
+}
