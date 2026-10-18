@@ -48,7 +48,7 @@ public class PortfolioService(DeskDbContext db, MarketDataService market)
         Book().Select(kv =>
         {
             var (p, underlying) = (kv.Value.Position, kv.Value.Underlying);
-            var mark = market.Resolve(kv.Key).Mid;
+            var mark = market.Value(kv.Key).Mid;
             return new PositionRow(kv.Key, underlying, p.Quantity, p.Multiplier, p.AveragePrice, mark,
                 p.MarketValue(mark), p.RealizedPnl, p.UnrealizedPnl(mark));
         }).OrderBy(r => r.Underlying).ThenBy(r => r.Symbol).ToList();
@@ -57,7 +57,7 @@ public class PortfolioService(DeskDbContext db, MarketDataService market)
         Book().Where(kv => kv.Value.Position.Quantity != 0).Select(kv =>
         {
             var p = kv.Value.Position;
-            var q = market.Resolve(kv.Key);
+            var q = market.Value(kv.Key);
             double units = p.Quantity * p.Multiplier;
             return new Exposure(kv.Key, kv.Value.Underlying, p.Quantity, units * q.Delta, units * q.Gamma,
                 units * q.Vega, units * q.Theta);

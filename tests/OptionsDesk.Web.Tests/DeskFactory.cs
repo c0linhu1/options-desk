@@ -19,6 +19,9 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
 
     private readonly SqliteConnection _connection = new("Data Source=:memory:");
 
+    /// <summary>The valuation date the app sees. Tests can move it forward.</summary>
+    public MutableClock Clock { get; } = new(AsOf);
+
     public DeskFactory() => _connection.Open();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -30,7 +33,7 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
             services.RemoveAll<IDbContextOptionsConfiguration<DeskDbContext>>();
             services.AddDbContext<DeskDbContext>(o => o.UseSqlite(_connection));
             services.RemoveAll<IValuationClock>();
-            services.AddSingleton<IValuationClock>(new FixedClock(AsOf));
+            services.AddSingleton<IValuationClock>(Clock);
         });
     }
 
@@ -54,9 +57,9 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
     [GeneratedRegex("name=\"__RequestVerificationToken\" type=\"hidden\" value=\"([^\"]+)\"")]
     private static partial Regex TokenPattern();
 
-    private sealed class FixedClock(DateOnly today) : IValuationClock
+    public sealed class MutableClock(DateOnly today) : IValuationClock
     {
-        public DateOnly Today => today;
+        public DateOnly Today { get; set; } = today;
     }
 }
 
