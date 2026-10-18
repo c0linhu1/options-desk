@@ -20,6 +20,19 @@ public class TradeBookingService(DeskDbContext db, MarketDataService market, Por
 {
     public BookingResult Book(TradeTicket ticket, string trader)
     {
+        // The risk check reads the whole book and the booking writes to it. Without one transaction around both,
+        // simultaneous orders each see the book without the others and can jointly breach a limit. On SQLite,
+        // BeginTransaction issues BEGIN IMMEDIATE: it takes the write lock up front, so bookings run one at a time
+        // (others wait up to the command timeout) across every process sharing the database.
+        using var tx = db.Database.BeginTransaction();
+        var result = BookInTransaction(ticket, trader);
+        if (result.Booked)
+            tx.Commit();
+        return result;
+    }
+
+    private BookingResult BookInTransaction(TradeTicket ticket, string trader)
+    {
         var instrument = market.Resolve(ticket.Symbol);
         var symbol = instrument.Symbol;
         var tradeDate = ticket.TradeDate ?? market.Today;
