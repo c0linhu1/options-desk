@@ -88,8 +88,16 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
             .ToList();
     }
 
-    /// <summary>Resolves a stock ticker or OCC option symbol.</summary>
-    public InstrumentQuote Resolve(string symbol)
+    /// <summary>Resolves a stock ticker or OCC option symbol for a new order. Options must be on a listed expiry.</summary>
+    public InstrumentQuote Resolve(string symbol) => Resolve(symbol, requireListed: true);
+
+    /// <summary>
+    /// Values an instrument the book already holds. Unlike <see cref="Resolve(string)"/> this accepts any expiry,
+    /// because a position outlives the listing: an option that has expired is marked at intrinsic value.
+    /// </summary>
+    public InstrumentQuote Value(string symbol) => Resolve(symbol, requireListed: false);
+
+    private InstrumentQuote Resolve(string symbol, bool requireListed)
     {
         if (!OptionContract.IsOptionSymbol(symbol))
         {
@@ -99,8 +107,16 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
 
         var contract = OptionContract.Parse(symbol);
         var u = GetUnderlying(contract.Underlying);
-        if (!ListedExpiries().Contains(contract.Expiry))
+        if (requireListed && !ListedExpiries().Contains(contract.Expiry))
             throw new DeskException(DeskErrorKind.Invalid, $"{contract.Expiry:yyyy-MM-dd} is not a listed expiry");
+
+        if (contract.Expiry < Today)
+        {
+            // No market after expiry: worth intrinsic, with the delta of the stock it settles into.
+            var g = BlackScholes.Greeks(contract.Right, (double)u.Spot, (double)contract.Strike, 0, 0);
+            return new InstrumentQuote(u, contract, contract.Intrinsic(u.Spot), g.Delta, 0, 0, 0);
+        }
+
         var q = Quote(u, contract);
         return new InstrumentQuote(u, contract, q.Mid, q.Delta, q.Gamma, q.Vega, q.Theta);
     }
