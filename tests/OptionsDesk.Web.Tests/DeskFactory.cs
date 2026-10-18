@@ -63,6 +63,6 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
 public static class HttpExtensions
 {
     public static Task<HttpResponseMessage> BookAsync(this HttpClient client, string symbol, string side, int quantity,
-        decimal price) =>
-        client.PostAsJsonAsync("/api/trades", new { symbol, side, quantity, price, account = "ACCT1" });
+        decimal price, DateOnly? tradeDate = null) =>
+        client.PostAsJsonAsync("/api/trades", new { symbol, side, quantity, price, account = "ACCT1", tradeDate });
 }

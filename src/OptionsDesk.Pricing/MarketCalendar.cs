@@ -20,14 +20,17 @@ public static class MarketCalendar
         d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !Holidays.Contains(d);
 
     /// <summary>US equities and listed options both settle T+1.</summary>
-    public static DateOnly SettlementDate(DateOnly tradeDate, int days = 1)
+    public static DateOnly SettlementDate(DateOnly tradeDate, int days = 1) => AddBusinessDays(tradeDate, days);
+
+    /// <summary>Moves <paramref name="days"/> business days forward, or back when negative.</summary>
+    public static DateOnly AddBusinessDays(DateOnly d, int days)
     {
-        var d = tradeDate;
-        while (days > 0)
+        var step = Math.Sign(days);
+        for (var remaining = Math.Abs(days); remaining > 0;)
         {
-            d = d.AddDays(1);
+            d = d.AddDays(step);
             if (IsBusinessDay(d))
-                days--;
+                remaining--;
         }
         return d;
     }

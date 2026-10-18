@@ -152,4 +152,25 @@ public class ApiTests : IDisposable
         Assert.Equal(0, origin, 6);
         Assert.True(grid.Pnl[1][^1] > 0, "long calls make money when spot rallies");
     }
+
+    [Theory]
+    [InlineData("2026-10-15", "in the future")]
+    [InlineData("2026-10-13", "before the earliest allowed date")]
+    [InlineData("2026-10-11", "not a business day")]
+    public async Task TradeDateMustBeToday(string tradeDate, string expected)
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DateOnly.Parse(tradeDate));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(expected, body.GetProperty("problems")[0].GetString());
+    }
+
+    [Fact]
+    public async Task TodaysDateIsAccepted()
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DeskFactory.AsOf);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
 }
