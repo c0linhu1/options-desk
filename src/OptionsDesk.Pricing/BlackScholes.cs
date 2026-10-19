@@ -18,10 +18,14 @@ public static class BlackScholes
     public static Greeks Greeks(OptionRight right, double spot, double strike, double t, double vol,
         double rate = 0, double div = 0)
     {
-        if (spot <= 0 || strike <= 0)
-            throw new ArgumentOutOfRangeException(nameof(spot), "spot and strike must be positive");
-        if (vol < 0 || t < 0)
-            throw new ArgumentOutOfRangeException(nameof(vol), "vol and time can't be negative");
+        if (spot <= 0)
+            throw new ArgumentOutOfRangeException(nameof(spot), "spot must be positive");
+        if (strike <= 0)
+            throw new ArgumentOutOfRangeException(nameof(strike), "strike must be positive");
+        if (vol < 0)
+            throw new ArgumentOutOfRangeException(nameof(vol), "vol can't be negative");
+        if (t < 0)
+            throw new ArgumentOutOfRangeException(nameof(t), "time can't be negative");
 
         var call = right == OptionRight.Call;
         var dfRate = Math.Exp(-rate * t);
