@@ -3,9 +3,15 @@
     ViewData["Title"] = "Positions";
 }
 
-<h1 class="h4">Positions</h1>
+<div class="d-flex justify-content-between align-items-baseline">
+    <h1 class="h4">Positions</h1>
+    @if (Model.Rows.Count > 0)
+    {
+        <a class="btn btn-sm btn-outline-secondary" asp-action="Export">Export CSV</a>
+    }
+</div>
 
-@if (Model.Positions.Count == 0)
+@if (Model.Rows.Count == 0)
 {
     <p class="text-muted">No positions. Book a trade from the <a asp-controller="Chain" asp-action="Index">chain</a>.</p>
 }
@@ -22,11 +28,16 @@ else
                 <th data-sort="num" class="num">Market value</th>
                 <th data-sort="num" class="num">Unrealized</th>
                 <th data-sort="num" class="num">Realized</th>
+                <th data-sort="num" class="num" title="shares">Delta</th>
+                <th data-sort="num" class="num" title="shares per $1 move">Gamma</th>
+                <th data-sort="num" class="num" title="$ per vol point">Vega</th>
+                <th data-sort="num" class="num" title="$ per day">Theta</th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var p in Model.Positions)
+            @foreach (var row in Model.Rows)
             {
+                var p = row.Position;
                 <tr>
                     <td>@p.Underlying</td>
                     <td class="font-monospace">@p.Symbol</td>
@@ -36,6 +47,10 @@ else
                     <td class="num" data-value="@p.MarketValue">@Fmt.Money(p.MarketValue)</td>
                     <td class="num @Fmt.Sign(p.UnrealizedPnl)" data-value="@p.UnrealizedPnl">@Fmt.Money(p.UnrealizedPnl)</td>
                     <td class="num @Fmt.Sign(p.RealizedPnl)" data-value="@p.RealizedPnl">@Fmt.Money(p.RealizedPnl)</td>
+                    <td class="num" data-value="@row.Delta">@Fmt.Num(row.Delta)</td>
+                    <td class="num" data-value="@row.Gamma">@Fmt.Num(row.Gamma, 1)</td>
+                    <td class="num" data-value="@row.Vega">@Fmt.Money(row.Vega)</td>
+                    <td class="num @Fmt.Sign(row.Theta)" data-value="@row.Theta">@Fmt.Money(row.Theta)</td>
                 </tr>
             }
         </tbody>
@@ -45,6 +60,9 @@ else
                 <td class="num">@Fmt.Money(Model.TotalMarketValue)</td>
                 <td class="num @Fmt.Sign(Model.TotalUnrealized)">@Fmt.Money(Model.TotalUnrealized)</td>
                 <td class="num @Fmt.Sign(Model.TotalRealized)">@Fmt.Money(Model.TotalRealized)</td>
+                <td colspan="2"></td>
+                <td class="num">@Fmt.Money(Model.TotalVega)</td>
+                <td class="num @Fmt.Sign(Model.TotalTheta)">@Fmt.Money(Model.TotalTheta)</td>
             </tr>
         </tfoot>
     </table>
