@@ -41,6 +41,20 @@ public class PageTests : IDisposable
     }
 
     [Fact]
+    public async Task ChainPageCarriesSmileData()
+    {
+        var html = await _factory.CreateClient().GetStringAsync("/Chain/AAPL");
+        Assert.Contains("id=\"smile-chart\"", html);
+        var json = System.Text.RegularExpressions.Regex.Match(html, "id=\"smile-data\">(.*?)</script>",
+            System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        using var data = JsonDocument.Parse(json);
+        var points = data.RootElement.GetProperty("points");
+        Assert.Equal(17, points.GetArrayLength());
+        Assert.All(points.EnumerateArray(), p => Assert.InRange(p.GetProperty("call").GetDouble(), 0.05, 2));
+        Assert.Equal(228.50m, data.RootElement.GetProperty("spot").GetDecimal());
+    }
+
+    [Fact]
     public async Task CompiledTypeScriptIsServed()
     {
         var response = await _factory.CreateClient().GetAsync("/js/ticket.js");
