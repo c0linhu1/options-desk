@@ -152,4 +152,56 @@ public class ApiTests : IDisposable
         Assert.Equal(0, origin, 6);
         Assert.True(grid.Pnl[1][^1] > 0, "long calls make money when spot rallies");
     }
+
+    [Fact]
+    public async Task PagesStillRenderAfterAHeldOptionExpires()
+    {
+        var client = await _factory.TradingClientAsync();
+        var itm = Call(200);
+        var otm = Call(260);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(itm, "Buy", 5, Mid(itm))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(otm, "Buy", 5, Mid(otm))).StatusCode);
+
+        _factory.Clock.Today = Front.AddDays(3);
+
+        foreach (var url in new[] { "/Positions", "/Risk", "/Risk?underlying=AAPL" })
+            (await client.GetAsync(url)).EnsureSuccessStatusCode();
+
+        using var scope = _factory.Services.CreateScope();
+        var positions = scope.ServiceProvider.GetRequiredService<PortfolioService>().Positions();
+        Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark); // intrinsic at spot
+        Assert.Equal(0m, positions.Single(p => p.Symbol == otm).Mark);
+    }
+
+    [Fact]
+    public async Task ExpiredOptionsCanNotBeBooked()
+    {
+        var client = await _factory.TradingClientAsync();
+        _factory.Clock.Today = Front.AddDays(3); // the Monday after expiry, so the trade date is a business day
+        var response = await client.BookAsync(Call(230), "Buy", 1, 1m);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("not a listed expiry", body.GetProperty("problems")[0].GetString());
+    }
+
+    [Theory]
+    [InlineData("2026-10-15", "in the future")]
+    [InlineData("2026-10-13", "before the earliest allowed date")]
+    [InlineData("2026-10-11", "not a business day")]
+    public async Task TradeDateMustBeToday(string tradeDate, string expected)
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DateOnly.Parse(tradeDate));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(expected, body.GetProperty("problems")[0].GetString());
+    }
+
+    [Fact]
+    public async Task TodaysDateIsAccepted()
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DeskFactory.AsOf);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
 }

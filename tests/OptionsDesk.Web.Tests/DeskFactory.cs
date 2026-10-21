@@ -8,18 +8,38 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OptionsDesk.Data;
+using OptionsDesk.Pricing;
 using OptionsDesk.Web.Services;
 
 namespace OptionsDesk.Web.Tests;
 
-/// <summary>The app on a private in-memory database, valued as of a fixed date.</summary>
+/// <summary>
+/// The app on a private database, valued as of a fixed date. The default is one shared in-memory
+/// connection; pass <c>fileDatabase: true</c> for a temp file where each request gets its own
+/// connection, as in production (needed to exercise concurrent requests).
+/// </summary>
 public sealed partial class DeskFactory : WebApplicationFactory<Program>
 {
     public static readonly DateOnly AsOf = new(2026, 10, 14);
 
-    private readonly SqliteConnection _connection = new("Data Source=:memory:");
+    private readonly SqliteConnection? _connection;
+    private readonly string? _dbFile;
+    private readonly RiskLimits? _limits;
 
-    public DeskFactory() => _connection.Open();
+    /// <summary>The valuation date the app sees. Tests can move it forward.</summary>
+    public MutableClock Clock { get; } = new(AsOf);
+
+    public DeskFactory(bool fileDatabase = false, RiskLimits? limits = null)
+    {
+        _limits = limits;
+        if (fileDatabase)
+        {
+            _dbFile = Path.Combine(Path.GetTempPath(), $"desk-test-{Guid.NewGuid():N}.db");
+            return;
+        }
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -28,17 +48,31 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<DbContextOptions<DeskDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<DeskDbContext>>();
-            services.AddDbContext<DeskDbContext>(o => o.UseSqlite(_connection));
+            if (_connection is not null)
+                services.AddDbContext<DeskDbContext>(o => o.UseSqlite(_connection));
+            else
+                services.AddDbContext<DeskDbContext>(o => o.UseSqlite($"Data Source={_dbFile}"));
+            if (_limits is not null)
+            {
+                services.RemoveAll<RiskLimits>();
+                services.AddSingleton(_limits);
+            }
             services.RemoveAll<IValuationClock>();
-            services.AddSingleton<IValuationClock>(new FixedClock(AsOf));
+            services.AddSingleton<IValuationClock>(Clock);
         });
     }
 
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing)
-            _connection.Dispose();
+        if (!disposing)
+            return;
+        _connection?.Dispose();
+        if (_dbFile is not null)
+        {
+            SqliteConnection.ClearAllPools();
+            File.Delete(_dbFile);
+        }
     }
 
     /// <summary>A client that has loaded the chain page, so it holds the antiforgery cookie and token.</summary>
@@ -54,15 +88,15 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
     [GeneratedRegex("name=\"__RequestVerificationToken\" type=\"hidden\" value=\"([^\"]+)\"")]
     private static partial Regex TokenPattern();
 
-    private sealed class FixedClock(DateOnly today) : IValuationClock
+    public sealed class MutableClock(DateOnly today) : IValuationClock
     {
-        public DateOnly Today => today;
+        public DateOnly Today { get; set; } = today;
     }
 }
 
 public static class HttpExtensions
 {
     public static Task<HttpResponseMessage> BookAsync(this HttpClient client, string symbol, string side, int quantity,
-        decimal price) =>
-        client.PostAsJsonAsync("/api/trades", new { symbol, side, quantity, price, account = "ACCT1" });
+        decimal price, DateOnly? tradeDate = null) =>
+        client.PostAsJsonAsync("/api/trades", new { symbol, side, quantity, price, account = "ACCT1", tradeDate });
 }
