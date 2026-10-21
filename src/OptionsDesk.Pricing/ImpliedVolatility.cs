@@ -18,20 +18,15 @@ public static class ImpliedVolatility
             : (Math.Max(pvStrike - forwardSpot, 0), pvStrike);
     }
 
-    /// <summary>Solver stops when a step moves vol by less than this (the old bisection's bracket width).</summary>
+    /// <summary>Stop when a step moves vol by less than this.</summary>
     public const double Tolerance = 1e-10;
 
     private const int MaxNewtonIterations = 100;
 
-    // 2^-52, the gap between 1.0 and the next double. Not double.Epsilon, which is the smallest denormal (4.9e-324).
+    // 2^-52. Not double.Epsilon, which is the smallest denormal.
     private const double MachineEpsilon = 2.220446049250313e-16;
 
-    /// <summary>
-    /// Solves for implied vol with safeguarded Newton-Raphson (Numerical Recipes' <c>rtsafe</c>): Newton steps on
-    /// vega, inside a bracket that always contains the answer, falling back to bisection whenever a Newton step would
-    /// leave the bracket or isn't shrinking at least as fast as bisection would. Stops when a step moves vol by less
-    /// than <see cref="Tolerance"/>, or when the model price matches the market to within floating-point noise.
-    /// </summary>
+    /// <summary>Safeguarded Newton-Raphson on vol (Numerical Recipes' rtsafe), falling back to bisection.</summary>
     public static double Solve(OptionRight right, double marketPrice, double spot, double strike, double t,
         double rate = 0, double div = 0) => Solve(right, marketPrice, spot, strike, t, rate, div, out _);
 
@@ -51,9 +46,7 @@ public static class ImpliedVolatility
         var step = hi - lo;
         evaluations = 0;
 
-        // Black-Scholes prices are only accurate to a few ulps of the spot and strike. Where vega is tiny (deep
-        // in-the-money, low vol, long-dated) the vol tolerance can't be reached through that noise, so a price that
-        // matches to within it is accepted: any vol that reproduces the market price that exactly is an answer.
+        // Where vega is tiny the vol tolerance is unreachable through rounding; accept a price match instead.
         var priceNoise = 2 * MachineEpsilon * Math.Max(spot, strike);
         for (var i = 0; i < MaxNewtonIterations; i++)
         {
@@ -63,18 +56,18 @@ public static class ImpliedVolatility
             if (Math.Abs(diff) <= priceNoise)
                 return vol;
 
-            // Price rises with vol, so a model price above the market means the answer is below this vol.
+            // Price rises with vol, so a price above the market means the answer is below this vol.
             if (diff > 0)
                 hi = vol;
             else
                 lo = vol;
 
-            // Greeks.Vega is per vol point (0.01); Newton needs the derivative per unit of vol.
+            // Greeks.Vega is per vol point; Newton needs it per unit of vol.
             var newtonStep = diff / (g.Vega * 100);
             var previousStep = step;
             var next = vol - newtonStep;
 
-            // Written as !(...) so that a NaN or infinite step, when vega underflows to zero, also bisects.
+            // Negated so a NaN or infinite step (vega underflowed to zero) also bisects.
             if (!(next > lo && next < hi) || !(2 * Math.Abs(newtonStep) <= Math.Abs(previousStep)))
                 next = (lo + hi) / 2;
 
@@ -84,7 +77,7 @@ public static class ImpliedVolatility
             vol = next;
         }
 
-        // Newton has never needed this many steps in testing; finishing by bisection guarantees termination.
+        // Not reached in testing; guarantees termination.
         while (hi - lo > Tolerance)
         {
             var mid = (lo + hi) / 2;
@@ -97,10 +90,7 @@ public static class ImpliedVolatility
         return (lo + hi) / 2;
     }
 
-    /// <summary>
-    /// Brenner-Subrahmanyam: an at-the-money option is worth about S * vol * sqrt(t / 2pi). Applied to the time value
-    /// (price above the no-arbitrage lower bound) so in-the-money options don't start with a far-too-high guess.
-    /// </summary>
+    /// <summary>Brenner-Subrahmanyam on the time value, so in-the-money options don't start far too high.</summary>
     private static double InitialGuess(double marketPrice, double lowerBound, double spot, double t, double div)
     {
         var guess = Math.Sqrt(2 * Math.PI / t) * (marketPrice - lowerBound) / (spot * Math.Exp(-div * t));
