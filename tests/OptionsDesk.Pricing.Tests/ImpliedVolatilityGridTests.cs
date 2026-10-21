@@ -58,8 +58,9 @@ public class ImpliedVolatilityGridTests
 
         foreach (var c in cases)
         {
-            var vol = ImpliedVolatility.Solve(c.Right, c.Price, Spot, c.Strike, c.T, c.Rate, c.Div);
+            var vol = ImpliedVolatility.Solve(c.Right, c.Price, Spot, c.Strike, c.T, c.Rate, c.Div, out var evaluations);
             Assert.InRange(vol, ImpliedVolatility.MinVol, ImpliedVolatility.MaxVol);
+            Assert.True(evaluations <= 36, $"{c}: {evaluations} evaluations; bisection always takes 36");
 
             var repriced = BlackScholes.Price(c.Right, Spot, c.Strike, c.T, vol, c.Rate, c.Div);
             Assert.True(Math.Abs(repriced - c.Price) <= 1e-8 * Math.Max(1, c.Price), $"{c}: repriced {repriced}");
@@ -75,7 +76,7 @@ public class ImpliedVolatilityGridTests
     }
 
     [Fact]
-    public void IsNeverSlowerThanBisectionForStrikesAndVolsADeskQuotes()
+    public void IsFastForStrikesAndVolsADeskQuotes()
     {
         // Strikes 0.5x to 2x spot, vols 5% to 150%, prices of at least a cent. Bisection always takes 36 evaluations.
         var cases = Grid([50, 80, 95, 99.9, 100, 100.1, 105, 120, 200], [0.05, 0.2, 0.6, 1.5])
@@ -87,7 +88,7 @@ public class ImpliedVolatilityGridTests
             return n;
         }).ToList();
 
-        Assert.True(evaluations.Max() <= 36, $"worst case {evaluations.Max()} evaluations");
+        Assert.True(evaluations.Max() <= 25, $"worst case {evaluations.Max()} evaluations");
         Assert.True(evaluations.Average() < 10, $"mean {evaluations.Average():F1} evaluations");
     }
 

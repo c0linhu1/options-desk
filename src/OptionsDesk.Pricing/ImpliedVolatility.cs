@@ -23,10 +23,14 @@ public static class ImpliedVolatility
 
     private const int MaxNewtonIterations = 100;
 
+    // 2^-52, the gap between 1.0 and the next double. Not double.Epsilon, which is the smallest denormal (4.9e-324).
+    private const double MachineEpsilon = 2.220446049250313e-16;
+
     /// <summary>
     /// Solves for implied vol with safeguarded Newton-Raphson (Numerical Recipes' <c>rtsafe</c>): Newton steps on
     /// vega, inside a bracket that always contains the answer, falling back to bisection whenever a Newton step would
-    /// leave the bracket or isn't shrinking at least as fast as bisection would.
+    /// leave the bracket or isn't shrinking at least as fast as bisection would. Stops when a step moves vol by less
+    /// than <see cref="Tolerance"/>, or when the model price matches the market to within floating-point noise.
     /// </summary>
     public static double Solve(OptionRight right, double marketPrice, double spot, double strike, double t,
         double rate = 0, double div = 0) => Solve(right, marketPrice, spot, strike, t, rate, div, out _);
@@ -46,12 +50,17 @@ public static class ImpliedVolatility
         var vol = InitialGuess(marketPrice, lower, spot, t, div);
         var step = hi - lo;
         evaluations = 0;
+
+        // Black-Scholes prices are only accurate to a few ulps of the spot and strike. Where vega is tiny (deep
+        // in-the-money, low vol, long-dated) the vol tolerance can't be reached through that noise, so a price that
+        // matches to within it is accepted: any vol that reproduces the market price that exactly is an answer.
+        var priceNoise = 2 * MachineEpsilon * Math.Max(spot, strike);
         for (var i = 0; i < MaxNewtonIterations; i++)
         {
             var g = BlackScholes.Greeks(right, spot, strike, t, vol, rate, div);
             evaluations++;
             var diff = g.Price - marketPrice;
-            if (diff == 0)
+            if (Math.Abs(diff) <= priceNoise)
                 return vol;
 
             // Price rises with vol, so a model price above the market means the answer is below this vol.
