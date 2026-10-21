@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    target-branch: test-prod
+    schedule:
+      interval: weekly
+    groups:
+      # EF Core, ASP.NET Core, and the test SDK ship together; update them in one PR.
+      microsoft:
+        patterns: ["Microsoft.*"]
+      xunit:
+        patterns: ["xunit*", "coverlet*"]
+    ignore:
+      # Major versions change APIs and need a person to plan the upgrade.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: test-prod
+    schedule:
+      interval: weekly
