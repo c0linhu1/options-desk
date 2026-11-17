@@ -93,9 +93,31 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
 
     /// <summary>
     /// Values an instrument the book already holds. Unlike <see cref="Resolve(string)"/> this accepts any expiry,
-    /// because a position outlives the listing: an option that has expired is marked at intrinsic value.
+    /// because a position outlives the listing: an option that has expired is marked at its settlement value.
     /// </summary>
     public InstrumentQuote Value(string symbol) => Resolve(symbol, requireListed: false);
+
+    /// <summary>
+    /// The underlying's price options expiring on <paramref name="expiry"/> settle at. The desk keeps no price
+    /// history, so the first time an expired contract is valued, the underlying's price then is recorded as its
+    /// settlement and used from then on: an expired option's value must stop following the stock.
+    /// </summary>
+    public decimal SettlementPrice(Underlying u, DateOnly expiry)
+    {
+        var recorded = db.Settlements.AsNoTracking()
+            .Where(s => s.Underlying == u.Symbol && s.Expiry == expiry)
+            .Select(s => (decimal?)s.Price)
+            .SingleOrDefault();
+        if (recorded is { } price)
+            return price;
+
+        // One statement, so two requests settling the same expiry at once can't collide; the first one wins.
+        db.Database.ExecuteSql($"""
+            INSERT INTO "Settlements" ("Underlying", "Expiry", "Price") VALUES ({u.Symbol}, {expiry}, {u.Spot})
+            ON CONFLICT DO NOTHING
+            """);
+        return db.Settlements.AsNoTracking().Single(s => s.Underlying == u.Symbol && s.Expiry == expiry).Price;
+    }
 
     private InstrumentQuote Resolve(string symbol, bool requireListed)
     {
@@ -112,9 +134,10 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
 
         if (contract.Expiry < Today)
         {
-            // No market after expiry: worth intrinsic, with the delta of the stock it settles into.
-            var g = BlackScholes.Greeks(contract.Right, (double)u.Spot, (double)contract.Strike, 0, 0);
-            return new InstrumentQuote(u, contract, contract.Intrinsic(u.Spot), g.Delta, 0, 0, 0);
+            // No market after expiry: worth its intrinsic value at settlement, which no longer moves with the stock.
+            // The desk doesn't book the stock an exercise would deliver, so the position itself has no Greeks.
+            var settled = contract.Intrinsic(SettlementPrice(u, contract.Expiry));
+            return new InstrumentQuote(u, contract, settled, 0, 0, 0, 0);
         }
 
         var q = Quote(u, contract);

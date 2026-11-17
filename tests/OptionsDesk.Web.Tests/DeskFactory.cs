@@ -25,13 +25,15 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
     private readonly SqliteConnection? _connection;
     private readonly string? _dbFile;
     private readonly RiskLimits? _limits;
+    private readonly Action<DeskOptions>? _desk;
 
     /// <summary>The valuation date the app sees. Tests can move it forward.</summary>
     public MutableClock Clock { get; } = new(AsOf);
 
-    public DeskFactory(bool fileDatabase = false, RiskLimits? limits = null)
+    public DeskFactory(bool fileDatabase = false, RiskLimits? limits = null, Action<DeskOptions>? desk = null)
     {
         _limits = limits;
+        _desk = desk;
         if (fileDatabase)
         {
             _dbFile = Path.Combine(Path.GetTempPath(), $"desk-test-{Guid.NewGuid():N}.db");
@@ -57,6 +59,8 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
                 services.RemoveAll<RiskLimits>();
                 services.AddSingleton(_limits);
             }
+            if (_desk is not null)
+                services.PostConfigure(_desk);
             services.RemoveAll<IValuationClock>();
             services.AddSingleton<IValuationClock>(Clock);
         });
@@ -70,7 +74,9 @@ public sealed partial class DeskFactory : WebApplicationFactory<Program>
         _connection?.Dispose();
         if (_dbFile is not null)
         {
-            SqliteConnection.ClearAllPools();
+            // Only this database's pooled connections hold the file open; other tests' pools are left alone.
+            using (var pooled = new SqliteConnection($"Data Source={_dbFile}"))
+                SqliteConnection.ClearPool(pooled);
             File.Delete(_dbFile);
         }
     }

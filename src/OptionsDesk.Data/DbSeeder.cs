@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace OptionsDesk.Data;
 
 /// <summary>Demo underlyings. Spots and vol parameters are illustrative, not live market data.</summary>
@@ -19,6 +21,16 @@ public static class DbSeeder
     public static void Seed(DeskDbContext db)
     {
         db.Database.EnsureCreated();
+        // EnsureCreated leaves an existing database alone, so add tables introduced since it was created.
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Settlements" (
+                "Underlying" TEXT NOT NULL,
+                "Expiry" TEXT NOT NULL,
+                "Price" TEXT NOT NULL,
+                CONSTRAINT "PK_Settlements" PRIMARY KEY ("Underlying", "Expiry"),
+                CONSTRAINT "FK_Settlements_Underlyings_Underlying" FOREIGN KEY ("Underlying")
+                    REFERENCES "Underlyings" ("Symbol") ON DELETE CASCADE)
+            """);
         if (db.Underlyings.Any())
             return;
         db.Underlyings.AddRange(DemoUnderlyings());

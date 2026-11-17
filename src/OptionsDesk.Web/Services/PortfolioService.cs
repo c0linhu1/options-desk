@@ -84,6 +84,8 @@ public class PortfolioService(DeskDbContext db, MarketDataService market)
                     continue;
                 }
                 var c = OptionContract.Parse(s);
+                if (c.Expiry < market.Today)
+                    continue; // settled: its value doesn't move with spot or vol, so it adds no scenario P&L
                 var vol = Math.Max(market.SmileVol(u, c.Strike, c.Expiry) + volShift, VolSmile.MinVol);
                 var price = BlackScholes.Price(c.Right, spot, (double)c.Strike, market.TimeToExpiry(c.Expiry), vol,
                     market.Rate, u.DividendYield);

@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using OptionsDesk.Data;
 using OptionsDesk.Pricing;
 using OptionsDesk.Web.Services;
 
@@ -169,8 +173,55 @@ public class ApiTests : IDisposable
 
         using var scope = _factory.Services.CreateScope();
         var positions = scope.ServiceProvider.GetRequiredService<PortfolioService>().Positions();
-        Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark); // intrinsic at spot
+        Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark); // intrinsic at settlement
         Assert.Equal(0m, positions.Single(p => p.Symbol == otm).Mark);
+    }
+
+    [Fact]
+    public async Task ExpiredOptionsKeepTheirSettlementValueWhenTheStockMoves()
+    {
+        var client = await _factory.TradingClientAsync();
+        var itm = Call(200);
+        var otm = Call(260);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(itm, "Buy", 5, Mid(itm))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(otm, "Buy", 5, Mid(otm))).StatusCode);
+
+        _factory.Clock.Today = Front.AddDays(3);
+        (await client.GetAsync("/Positions")).EnsureSuccessStatusCode(); // first valuation records the settlement
+
+        // The stock rallies through the out-of-the-money strike after expiry.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DeskDbContext>();
+            db.Underlyings.Single(u => u.Symbol == "AAPL").Spot = 270m;
+            db.SaveChanges();
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var portfolio = scope.ServiceProvider.GetRequiredService<PortfolioService>();
+            var positions = portfolio.Positions();
+            Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark);
+            Assert.Equal(0m, positions.Single(p => p.Symbol == otm).Mark);
+            Assert.All(portfolio.Exposures(), e => Assert.Equal(0, e.Delta));
+            Assert.All(portfolio.Scenarios("AAPL").Pnl.SelectMany(row => row), pnl => Assert.Equal(0, pnl));
+        }
+    }
+
+    [Fact]
+    public void DatabasesCreatedBeforeSettlementsGainTheTable()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = new DeskDbContext(new DbContextOptionsBuilder<DeskDbContext>().UseSqlite(connection).Options);
+        db.Database.EnsureCreated();
+        db.Database.ExecuteSqlRaw("""DROP TABLE "Settlements" """);
+
+        DbSeeder.Seed(db);
+
+        db.Settlements.Add(new Settlement { Underlying = "AAPL", Expiry = new DateOnly(2026, 10, 16), Price = 228.5m });
+        db.SaveChanges();
+        Assert.Equal(228.5m, db.Settlements.AsNoTracking().Single().Price);
     }
 
     [Fact]
@@ -188,6 +239,7 @@ public class ApiTests : IDisposable
     [InlineData("2026-10-15", "in the future")]
     [InlineData("2026-10-13", "before the earliest allowed date")]
     [InlineData("2026-10-11", "not a business day")]
+    [InlineData("2026-09-07", "not a business day")] // Labor Day
     public async Task TradeDateMustBeToday(string tradeDate, string expected)
     {
         var client = await _factory.TradingClientAsync();
@@ -203,5 +255,40 @@ public class ApiTests : IDisposable
         var client = await _factory.TradingClientAsync();
         var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DeskFactory.AsOf);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+}
+
+public class BackdatingTests : IDisposable
+{
+    // As of Wednesday 2026-10-14, two business days back is Monday 2026-10-12.
+    private readonly DeskFactory _factory = new(desk: o => o.MaxBackdateBusinessDays = 2);
+
+    public void Dispose() => _factory.Dispose();
+
+    [Theory]
+    [InlineData("2026-10-14")]
+    [InlineData("2026-10-12")]
+    public async Task TradesWithinTheWindowAreBooked(string tradeDate)
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, DateOnly.Parse(tradeDate));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TradesBeforeTheWindowAreRejected()
+    {
+        var client = await _factory.TradingClientAsync();
+        var response = await client.BookAsync("AAPL", "Buy", 100, 228.50m, new DateOnly(2026, 10, 9));
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("before the earliest allowed date 2026-10-12", body.GetProperty("problems")[0].GetString());
+    }
+
+    [Fact]
+    public void ANegativeWindowIsRejectedAtStartup()
+    {
+        using var factory = new DeskFactory(desk: o => o.MaxBackdateBusinessDays = -1);
+        Assert.Throws<OptionsValidationException>(() => factory.CreateClient());
     }
 }

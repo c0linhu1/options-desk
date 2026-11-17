@@ -1,3 +1,5 @@
+using System.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OptionsDesk.Data;
 using OptionsDesk.Pricing;
@@ -20,11 +22,12 @@ public class TradeBookingService(DeskDbContext db, MarketDataService market, Por
 {
     public BookingResult Book(TradeTicket ticket, string trader)
     {
-        // The risk check reads the whole book and the booking writes to it. Without one transaction around both,
-        // simultaneous orders each see the book without the others and can jointly breach a limit. On SQLite,
-        // BeginTransaction issues BEGIN IMMEDIATE: it takes the write lock up front, so bookings run one at a time
-        // (others wait up to the command timeout) across every process sharing the database.
-        using var tx = db.Database.BeginTransaction();
+        // The risk check reads the whole book and the booking writes to it. Without one serializable transaction
+        // around both, simultaneous orders each see the book without the others and can jointly breach a limit.
+        // On SQLite this is BEGIN IMMEDIATE: it takes the write lock up front, so bookings run one at a time
+        // (others wait up to the command timeout) across every process sharing the database. Asking for
+        // Serializable explicitly keeps that guarantee on databases whose default isolation is weaker.
+        using var tx = db.Database.BeginTransaction(IsolationLevel.Serializable);
         var result = BookInTransaction(ticket, trader);
         if (result.Booked)
             tx.Commit();
@@ -36,10 +39,10 @@ public class TradeBookingService(DeskDbContext db, MarketDataService market, Por
         var instrument = market.Resolve(ticket.Symbol);
         var symbol = instrument.Symbol;
         var tradeDate = ticket.TradeDate ?? market.Today;
+        // Resolve only accepts listed expiries, which are all after today, and the trade date can't be after today,
+        // so an option can't be booked on or after its expiry.
         if (TradeDateProblem(tradeDate) is { } dateProblem)
             return BookingResult.Rejected(symbol, [dateProblem]);
-        if (instrument.Contract is { } c && tradeDate > c.Expiry)
-            return BookingResult.Rejected(symbol, [$"{symbol} expired on {c.Expiry:yyyy-MM-dd}"]);
 
         Order order;
         try
