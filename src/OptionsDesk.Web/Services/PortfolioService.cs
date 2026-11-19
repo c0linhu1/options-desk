@@ -6,7 +6,7 @@ namespace OptionsDesk.Web.Services;
 
 public sealed record PositionRow(
     string Symbol, string Underlying, int Quantity, int Multiplier, decimal AveragePrice, decimal Mark,
-    decimal MarketValue, decimal RealizedPnl, decimal UnrealizedPnl);
+    decimal MarketValue, decimal RealizedPnl, decimal UnrealizedPnl, string? Expiry = null);
 
 /// <summary>Greeks of one position in book terms: delta in shares, vega and theta in dollars.</summary>
 public sealed record Exposure(string Symbol, string Underlying, int Quantity, double Delta, double Gamma,
@@ -48,9 +48,9 @@ public class PortfolioService(DeskDbContext db, MarketDataService market)
         Book().Select(kv =>
         {
             var (p, underlying) = (kv.Value.Position, kv.Value.Underlying);
-            var mark = market.Value(kv.Key).Mid;
-            return new PositionRow(kv.Key, underlying, p.Quantity, p.Multiplier, p.AveragePrice, mark,
-                p.MarketValue(mark), p.RealizedPnl, p.UnrealizedPnl(mark));
+            var q = market.Value(kv.Key);
+            return new PositionRow(kv.Key, underlying, p.Quantity, p.Multiplier, p.AveragePrice, q.Mid,
+                p.MarketValue(q.Mid), p.RealizedPnl, p.UnrealizedPnl(q.Mid), q.Expiry);
         }).OrderBy(r => r.Underlying).ThenBy(r => r.Symbol).ToList();
 
     public IReadOnlyList<Exposure> Exposures() =>
@@ -85,7 +85,12 @@ public class PortfolioService(DeskDbContext db, MarketDataService market)
                 }
                 var c = OptionContract.Parse(s);
                 if (c.Expiry < market.Today)
-                    continue; // settled: its value doesn't move with spot or vol, so it adds no scenario P&L
+                {
+                    // Exercised options move like the stock they delivered; worthless ones add nothing.
+                    var direction = market.ExercisedDirection(u, c);
+                    total += p.Quantity * c.Multiplier * direction * (spot - (double)c.Strike);
+                    continue;
+                }
                 var vol = Math.Max(market.SmileVol(u, c.Strike, c.Expiry) + volShift, VolSmile.MinVol);
                 var price = BlackScholes.Price(c.Right, spot, (double)c.Strike, market.TimeToExpiry(c.Expiry), vol,
                     market.Rate, u.DividendYield);

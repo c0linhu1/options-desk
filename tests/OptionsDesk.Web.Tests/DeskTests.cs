@@ -63,6 +63,8 @@ public class ApiTests : IDisposable
     private static string Call(decimal strike, string underlying = "AAPL") =>
         new OptionContract(underlying, Front, strike, OptionRight.Call).Symbol;
 
+    private static string Put(decimal strike) => new OptionContract("AAPL", Front, strike, OptionRight.Put).Symbol;
+
     private decimal Mid(string symbol)
     {
         using var scope = _factory.Services.CreateScope();
@@ -173,21 +175,26 @@ public class ApiTests : IDisposable
 
         using var scope = _factory.Services.CreateScope();
         var positions = scope.ServiceProvider.GetRequiredService<PortfolioService>().Positions();
-        Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark); // intrinsic at settlement
+        Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark); // exercised: spot less strike
+        Assert.Equal("exercised", positions.Single(p => p.Symbol == itm).Expiry);
         Assert.Equal(0m, positions.Single(p => p.Symbol == otm).Mark);
+        Assert.Equal("expired worthless", positions.Single(p => p.Symbol == otm).Expiry);
+        Assert.Contains("expired worthless", await client.GetStringAsync("/Positions"));
     }
 
     [Fact]
-    public async Task ExpiredOptionsKeepTheirSettlementValueWhenTheStockMoves()
+    public async Task SettlementDecidesExerciseAndExercisedOptionsMoveWithTheStock()
     {
         var client = await _factory.TradingClientAsync();
-        var itm = Call(200);
-        var otm = Call(260);
-        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(itm, "Buy", 5, Mid(itm))).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(otm, "Buy", 5, Mid(otm))).StatusCode);
+        var itmCall = Call(200);
+        var otmCall = Call(260);
+        var itmPut = Put(250);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(itmCall, "Buy", 5, Mid(itmCall))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(otmCall, "Buy", 5, Mid(otmCall))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.BookAsync(itmPut, "Buy", 3, Mid(itmPut))).StatusCode);
 
         _factory.Clock.Today = Front.AddDays(3);
-        (await client.GetAsync("/Positions")).EnsureSuccessStatusCode(); // first valuation records the settlement
+        (await client.GetAsync("/Positions")).EnsureSuccessStatusCode(); // first valuation records the settlement at 228.50
 
         // The stock rallies through the out-of-the-money strike after expiry.
         using (var scope = _factory.Services.CreateScope())
@@ -201,10 +208,19 @@ public class ApiTests : IDisposable
         {
             var portfolio = scope.ServiceProvider.GetRequiredService<PortfolioService>();
             var positions = portfolio.Positions();
-            Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark);
-            Assert.Equal(0m, positions.Single(p => p.Symbol == otm).Mark);
-            Assert.All(portfolio.Exposures(), e => Assert.Equal(0, e.Delta));
-            Assert.All(portfolio.Scenarios("AAPL").Pnl.SelectMany(row => row), pnl => Assert.Equal(0, pnl));
+            Assert.Equal(270m - 200m, positions.Single(p => p.Symbol == itmCall).Mark); // long 500 shares at 200
+            Assert.Equal(0m, positions.Single(p => p.Symbol == otmCall).Mark); // worthless at settlement, stays so
+            Assert.Equal(250m - 270m, positions.Single(p => p.Symbol == itmPut).Mark); // short 300 shares at 250
+
+            var delta = portfolio.Exposures().ToDictionary(e => e.Symbol, e => e.Delta);
+            Assert.Equal(500, delta[itmCall]);
+            Assert.Equal(0, delta[otmCall]);
+            Assert.Equal(-300, delta[itmPut]);
+
+            var grid = portfolio.Scenarios("AAPL");
+            for (var v = 0; v < PortfolioService.VolShocks.Length; v++)
+                for (var s = 0; s < PortfolioService.SpotShocks.Length; s++)
+                    Assert.Equal(200 * 270 * PortfolioService.SpotShocks[s], grid.Pnl[v][s], 6); // net 200 shares
         }
     }
 

@@ -14,10 +14,13 @@ public sealed record OptionQuote(
 
 public sealed record ChainRow(decimal Strike, OptionQuote Call, OptionQuote Put);
 
-/// <summary>A tradable instrument resolved to its underlying, mid, and per-share Greeks.</summary>
+/// <summary>
+/// A tradable instrument resolved to its underlying, mid, and per-share Greeks. <paramref name="Expiry"/> says
+/// how an expired option settled; it's null for anything still trading.
+/// </summary>
 public sealed record InstrumentQuote(
     Underlying Underlying, OptionContract? Contract, decimal Mid,
-    double Delta, double Gamma, double Vega, double Theta)
+    double Delta, double Gamma, double Vega, double Theta, string? Expiry = null)
 {
     public bool IsOption => Contract is not null;
     public int Multiplier => Contract?.Multiplier ?? 1;
@@ -98,6 +101,13 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
     public InstrumentQuote Value(string symbol) => Resolve(symbol, requireListed: false);
 
     /// <summary>
+    /// What an expired option turned into: +1 for a call and -1 for a put that settled in the money, since those
+    /// are exercised into stock bought (or sold) at the strike; 0 for one that expired worthless.
+    /// </summary>
+    public int ExercisedDirection(Underlying u, OptionContract c) =>
+        c.Intrinsic(SettlementPrice(u, c.Expiry)) == 0 ? 0 : c.Right == OptionRight.Call ? 1 : -1;
+
+    /// <summary>
     /// The underlying's price options expiring on <paramref name="expiry"/> settle at. The desk keeps no price
     /// history, so the first time an expired contract is valued, the underlying's price then is recorded as its
     /// settlement and used from then on: an expired option's value must stop following the stock.
@@ -134,10 +144,13 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
 
         if (contract.Expiry < Today)
         {
-            // No market after expiry: worth its intrinsic value at settlement, which no longer moves with the stock.
-            // The desk doesn't book the stock an exercise would deliver, so the position itself has no Greeks.
-            var settled = contract.Intrinsic(SettlementPrice(u, contract.Expiry));
-            return new InstrumentQuote(u, contract, settled, 0, 0, 0, 0);
+            // Settlement decides whether it was exercised; after that an exercised option is stock bought (or sold)
+            // at the strike, so it's worth spot less strike and moves one for one with the stock.
+            var direction = ExercisedDirection(u, contract);
+            return direction == 0
+                ? new InstrumentQuote(u, contract, 0, 0, 0, 0, 0, "expired worthless")
+                : new InstrumentQuote(u, contract, direction * (u.Spot - contract.Strike), direction, 0, 0, 0,
+                    "exercised");
         }
 
         var q = Quote(u, contract);
