@@ -16,11 +16,16 @@ public sealed record ChainViewModel(
     double TimeToExpiry,
     IReadOnlyList<ChainRow> Rows);
 
-public sealed record PositionsViewModel(IReadOnlyList<PositionRow> Positions)
+/// <summary>A position with its Greeks in book terms: delta and gamma in shares, vega and theta in dollars.</summary>
+public sealed record PositionGreeksRow(PositionRow Position, double Delta, double Gamma, double Vega, double Theta);
+
+public sealed record PositionsViewModel(IReadOnlyList<PositionGreeksRow> Rows)
 {
-    public decimal TotalMarketValue => Positions.Sum(p => p.MarketValue);
-    public decimal TotalRealized => Positions.Sum(p => p.RealizedPnl);
-    public decimal TotalUnrealized => Positions.Sum(p => p.UnrealizedPnl);
+    public decimal TotalMarketValue => Rows.Sum(r => r.Position.MarketValue);
+    public decimal TotalRealized => Rows.Sum(r => r.Position.RealizedPnl);
+    public decimal TotalUnrealized => Rows.Sum(r => r.Position.UnrealizedPnl);
+    public double TotalVega => Rows.Sum(r => r.Vega);
+    public double TotalTheta => Rows.Sum(r => r.Theta);
 }
 
 public sealed record TradesViewModel(IReadOnlyList<Trade> Trades, IReadOnlyList<string> Underlyings,
