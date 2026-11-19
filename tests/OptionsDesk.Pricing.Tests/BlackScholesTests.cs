@@ -48,6 +48,27 @@ public class BlackScholesTests
         Assert.Equal(0, BlackScholes.Price(OptionRight.Put, 110, 100, 0, 0.3));
     }
 
+    [Theory]
+    [InlineData(0, 100, 1, 0.2, "spot")]
+    [InlineData(-5, 100, 1, 0.2, "spot")]
+    [InlineData(100, 0, 1, 0.2, "strike")]
+    [InlineData(100, -5, 1, 0.2, "strike")]
+    [InlineData(100, 100, 1, -0.1, "vol")]
+    [InlineData(100, 100, -1, 0.2, "t")]
+    public void RejectsBadInputsNamingTheArgument(double spot, double strike, double t, double vol, string param)
+    {
+        var e = Assert.Throws<ArgumentOutOfRangeException>(
+            () => BlackScholes.Greeks(OptionRight.Call, spot, strike, t, vol));
+        Assert.Equal(param, e.ParamName);
+    }
+
+    [Fact]
+    public void AcceptsZeroVolAndZeroTime()
+    {
+        Assert.Equal(0, BlackScholes.Price(OptionRight.Call, 100, 100, 1, 0));
+        Assert.Equal(10, BlackScholes.Price(OptionRight.Call, 110, 100, 0, 0.2), 10);
+    }
+
     [Fact]
     public void NormalCdfIsAccurate()
     {
