@@ -1,7 +1,7 @@
 // Trade ticket on the chain page: clicking a quote fills the ticket, the analytics panel shows
 // implied vol and Greeks at the entered price, and submitting books through the API.
 import { ApiError, bookTrade, impliedVol, type Side } from "./api.js";
-import { greek, isOptionSymbol, money, OPTION_MULTIPLIER, pct } from "./format.js";
+import { defaultQuantity, greek, isOptionSymbol, money, OPTION_MULTIPLIER, pct } from "./format.js";
 
 const form = document.querySelector<HTMLFormElement>("#ticket");
 if (form) init(form);
@@ -16,6 +16,16 @@ function init(form: HTMLFormElement): void {
   const errors = form.querySelector<HTMLElement>("#ticket-errors")!;
   const success = form.querySelector<HTMLElement>("#ticket-success")!;
   const submit = form.querySelector<HTMLButtonElement>("#ticket-submit")!;
+  const quantityUnit = form.querySelector<HTMLElement>("#ticket-quantity-unit")!;
+
+  // The quantity's unit depends on the instrument: contracts (x100 shares) for options, shares for stock.
+  // When the instrument type changes, the old number means something else, so reset it to that type's default.
+  let ticketIsOption = true;
+  function setInstrumentKind(isOption: boolean): void {
+    quantityUnit.textContent = isOption ? "(contracts)" : "(shares)";
+    if (isOption !== ticketIsOption) quantity.value = String(defaultQuantity(isOption));
+    ticketIsOption = isOption;
+  }
 
   const side = (): Side => (form.querySelector<HTMLInputElement>('input[name="side"]:checked')?.value as Side) ?? "Buy";
   const setSide = (s: Side) => {
@@ -76,7 +86,7 @@ function init(form: HTMLFormElement): void {
     symbol.value = sym;
     setSide(s);
     price.value = px;
-    if (!isOptionSymbol(sym) && Number(quantity.value) < 100) quantity.value = "100";
+    setInstrumentKind(isOptionSymbol(sym));
     show(errors, null);
     show(success, null);
     void refreshAnalytics();
@@ -89,6 +99,7 @@ function init(form: HTMLFormElement): void {
     button.addEventListener("click", () => fill(button.dataset.stock!, "Buy", button.dataset.price!)),
   );
   for (const input of [symbol, quantity, price]) input.addEventListener("input", scheduleRefresh);
+  symbol.addEventListener("change", () => setInstrumentKind(isOptionSymbol(symbol.value)));
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -103,7 +114,10 @@ function init(form: HTMLFormElement): void {
         price: Number(price.value),
         account: account.value.trim(),
       });
-      show(success, [`Booked #${result.tradeId}: ${side()} ${quantity.value} ${result.symbol}, settles ${result.settleDate}`]);
+      const unit = ticketIsOption ? "contracts" : "shares";
+      show(success, [
+        `Booked #${result.tradeId}: ${side()} ${quantity.value} ${unit} ${result.symbol}, settles ${result.settleDate}`,
+      ]);
     } catch (e) {
       show(errors, e instanceof ApiError ? e.problems : [String(e)]);
     } finally {

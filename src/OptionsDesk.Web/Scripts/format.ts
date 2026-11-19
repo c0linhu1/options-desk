@@ -20,3 +20,8 @@ export function isOptionSymbol(symbol: string): boolean {
 }
 
 export const OPTION_MULTIPLIER = 100;
+
+/** Ticket default size: 10 contracts for options, 100 shares for stock. */
+export function defaultQuantity(isOption: boolean): number {
+  return isOption ? 10 : 100;
+}
