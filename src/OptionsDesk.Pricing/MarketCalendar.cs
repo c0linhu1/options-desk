@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Collections.Frozen;
+
 namespace OptionsDesk.Pricing;
 
 /// <summary>
@@ -7,17 +10,26 @@ namespace OptionsDesk.Pricing;
 /// </summary>
 public static class MarketCalendar
 {
-    // NYSE full-day closures. Extend each year.
-    public static readonly IReadOnlySet<DateOnly> Holidays = new HashSet<DateOnly>
+    /// <summary>First year the holiday rules describe: Juneteenth became an NYSE holiday in 2022.</summary>
+    public const int FirstSupportedYear = 2022;
+
+    // Unscheduled full-day closures, such as national days of mourning. Add them as the exchange announces them.
+    private static readonly FrozenSet<DateOnly> SpecialClosures = new[]
     {
-        new(2026, 1, 1), new(2026, 1, 19), new(2026, 2, 16), new(2026, 4, 3), new(2026, 5, 25),
-        new(2026, 6, 19), new(2026, 7, 3), new(2026, 9, 7), new(2026, 11, 26), new(2026, 12, 25),
-        new(2027, 1, 1), new(2027, 1, 18), new(2027, 2, 15), new(2027, 3, 26), new(2027, 5, 31),
-        new(2027, 6, 18), new(2027, 7, 5), new(2027, 9, 6), new(2027, 11, 25), new(2027, 12, 24),
-    };
+        new DateOnly(2025, 1, 9), // national day of mourning for President Carter
+    }.ToFrozenSet();
+
+    private static readonly ConcurrentDictionary<int, FrozenSet<DateOnly>> HolidaysByYear = new();
+
+    /// <summary>
+    /// NYSE full-day closures in <paramref name="year"/>, from the exchange's holiday rules plus any special closures.
+    /// </summary>
+    public static IReadOnlySet<DateOnly> HolidaysIn(int year) => HolidaysByYear.GetOrAdd(year, BuildHolidays);
+
+    public static bool IsHoliday(DateOnly d) => HolidaysIn(d.Year).Contains(d);
 
     public static bool IsBusinessDay(DateOnly d) =>
-        d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !Holidays.Contains(d);
+        d.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday) && !IsHoliday(d);
 
     /// <summary>US equities and listed options both settle T+1.</summary>
     public static DateOnly SettlementDate(DateOnly tradeDate, int days = 1)
@@ -65,4 +77,76 @@ public static class MarketCalendar
     /// <summary>Calendar time to expiry in years, ACT/365.</summary>
     public static double YearFraction(DateOnly asOf, DateOnly expiry) =>
         Math.Max(expiry.DayNumber - asOf.DayNumber, 0) / 365.0;
+
+    /// <summary>Easter Sunday in the Gregorian calendar (anonymous Gregorian algorithm, Meeus/Jones/Butcher).</summary>
+    public static DateOnly EasterSunday(int year)
+    {
+        var a = year % 19;
+        var b = year / 100;
+        var c = year % 100;
+        var d = b / 4;
+        var e = b % 4;
+        var f = (b + 8) / 25;
+        var g = (b - f + 1) / 3;
+        var h = (19 * a + b - d - g + 15) % 30;
+        var i = c / 4;
+        var k = c % 4;
+        var l = (32 + 2 * e + 2 * i - h - k) % 7;
+        var m = (a + 11 * h + 22 * l) / 451;
+        var month = (h + l - 7 * m + 114) / 31;
+        var day = (h + l - 7 * m + 114) % 31 + 1;
+        return new DateOnly(year, month, day);
+    }
+
+    private static FrozenSet<DateOnly> BuildHolidays(int year)
+    {
+        if (year < FirstSupportedYear)
+            throw new ArgumentOutOfRangeException(nameof(year), $"the exchange calendar covers {FirstSupportedYear} onward");
+
+        var days = new HashSet<DateOnly>
+        {
+            NthWeekday(year, 1, DayOfWeek.Monday, 3), // Martin Luther King Jr. Day
+            NthWeekday(year, 2, DayOfWeek.Monday, 3), // Washington's Birthday
+            EasterSunday(year).AddDays(-2), // Good Friday
+            LastWeekday(year, 5, DayOfWeek.Monday), // Memorial Day
+            Observed(new DateOnly(year, 6, 19)), // Juneteenth
+            Observed(new DateOnly(year, 7, 4)), // Independence Day
+            NthWeekday(year, 9, DayOfWeek.Monday, 1), // Labor Day
+            NthWeekday(year, 11, DayOfWeek.Thursday, 4), // Thanksgiving
+            Observed(new DateOnly(year, 12, 25)), // Christmas
+        };
+
+        // New Year's Day moves to Monday when it falls on a Sunday, but when it falls on a Saturday the exchange
+        // stays open the Friday before (the last trading day of the year) and there is no closure.
+        var newYear = new DateOnly(year, 1, 1);
+        if (newYear.DayOfWeek == DayOfWeek.Sunday)
+            days.Add(newYear.AddDays(1));
+        else if (newYear.DayOfWeek != DayOfWeek.Saturday)
+            days.Add(newYear);
+
+        days.UnionWith(SpecialClosures.Where(d => d.Year == year));
+        return days.ToFrozenSet();
+    }
+
+    /// <summary>Saturday holidays are observed the Friday before, Sunday holidays the Monday after.</summary>
+    private static DateOnly Observed(DateOnly d) => d.DayOfWeek switch
+    {
+        DayOfWeek.Saturday => d.AddDays(-1),
+        DayOfWeek.Sunday => d.AddDays(1),
+        _ => d,
+    };
+
+    private static DateOnly NthWeekday(int year, int month, DayOfWeek weekday, int n)
+    {
+        var first = new DateOnly(year, month, 1);
+        var toWeekday = ((int)weekday - (int)first.DayOfWeek + 7) % 7;
+        return first.AddDays(toWeekday + 7 * (n - 1));
+    }
+
+    private static DateOnly LastWeekday(int year, int month, DayOfWeek weekday)
+    {
+        var last = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        var back = ((int)last.DayOfWeek - (int)weekday + 7) % 7;
+        return last.AddDays(-back);
+    }
 }
