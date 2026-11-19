@@ -77,4 +77,14 @@ public class MarketCalendarTests
     {
         Assert.Equal(new DateOnly(sy, sm, sd), MarketCalendar.SettlementDate(new DateOnly(y, m, d)));
     }
+
+    [Theory]
+    [InlineData(2026, 10, 19, -1, 2026, 10, 16)] // Mon back to Fri
+    [InlineData(2026, 11, 27, -1, 2026, 11, 25)] // back over Thanksgiving
+    [InlineData(2026, 10, 14, 0, 2026, 10, 14)]
+    [InlineData(2026, 10, 14, 3, 2026, 10, 19)]
+    public void AddsBusinessDaysInBothDirections(int y, int m, int d, int days, int ey, int em, int ed)
+    {
+        Assert.Equal(new DateOnly(ey, em, ed), MarketCalendar.AddBusinessDays(new DateOnly(y, m, d), days));
+    }
 }

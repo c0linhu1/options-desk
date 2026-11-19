@@ -29,7 +29,13 @@ else
             {
                 <tr>
                     <td>@p.Underlying</td>
-                    <td class="font-monospace">@p.Symbol</td>
+                    <td class="font-monospace">
+                        @p.Symbol
+                        @if (p.ExpiryOutcome is not null)
+                        {
+                            <span class="badge text-bg-secondary">@p.ExpiryOutcome</span>
+                        }
+                    </td>
                     <td class="num">@p.Quantity.ToString("N0")</td>
                     <td class="num">@Fmt.Price(p.AveragePrice)</td>
                     <td class="num">@Fmt.Price(p.Mark)</td>

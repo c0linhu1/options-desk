@@ -17,6 +17,14 @@ public class Underlying
     public VolSmile Smile => new(BaseVol, Skew, Curvature);
 }
 
+/// <summary>The underlying's price that options on it expiring on <see cref="Expiry"/> settled at. Fixed once recorded.</summary>
+public class Settlement
+{
+    public required string Underlying { get; set; }
+    public DateOnly Expiry { get; set; }
+    public decimal Price { get; set; }
+}
+
 /// <summary>A booked trade. Symbol is the stock ticker or the OCC option symbol.</summary>
 public class Trade
 {

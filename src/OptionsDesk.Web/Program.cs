@@ -15,7 +15,10 @@ builder.Services.AddControllersWithViews()
 builder.Services.AddAntiforgery(o => o.HeaderName = "RequestVerificationToken");
 
 builder.Services.AddDbContext<DeskDbContext>(o => o.UseSqlite(builder.Configuration.GetConnectionString("Desk")));
-builder.Services.Configure<DeskOptions>(builder.Configuration.GetSection("Desk"));
+builder.Services.AddOptions<DeskOptions>()
+    .Bind(builder.Configuration.GetSection("Desk"))
+    .Validate(o => o.MaxBackdateBusinessDays >= 0, "Desk:MaxBackdateBusinessDays can't be negative")
+    .ValidateOnStart();
 builder.Services.AddSingleton(builder.Configuration.GetSection("RiskLimits").Get<RiskLimits>() ?? new RiskLimits());
 builder.Services.AddSingleton<IValuationClock, SystemValuationClock>();
 builder.Services.AddSingleton(TimeProvider.System);
