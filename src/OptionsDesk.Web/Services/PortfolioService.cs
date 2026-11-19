@@ -6,7 +6,7 @@ namespace OptionsDesk.Web.Services;
 
 public sealed record PositionRow(
     string Symbol, string Underlying, int Quantity, int Multiplier, decimal AveragePrice, decimal Mark,
-    decimal MarketValue, decimal RealizedPnl, decimal UnrealizedPnl, string? Expiry = null);
+    decimal MarketValue, decimal RealizedPnl, decimal UnrealizedPnl, string? ExpiryOutcome = null);
 
 /// <summary>Greeks of one position in book terms: delta in shares, vega and theta in dollars.</summary>
 public sealed record Exposure(string Symbol, string Underlying, int Quantity, double Delta, double Gamma,
@@ -50,7 +50,7 @@ public class PortfolioService(DeskDbContext db, MarketDataService market)
             var (p, underlying) = (kv.Value.Position, kv.Value.Underlying);
             var q = market.Value(kv.Key);
             return new PositionRow(kv.Key, underlying, p.Quantity, p.Multiplier, p.AveragePrice, q.Mid,
-                p.MarketValue(q.Mid), p.RealizedPnl, p.UnrealizedPnl(q.Mid), q.Expiry);
+                p.MarketValue(q.Mid), p.RealizedPnl, p.UnrealizedPnl(q.Mid), q.ExpiryOutcome);
         }).OrderBy(r => r.Underlying).ThenBy(r => r.Symbol).ToList();
 
     public IReadOnlyList<Exposure> Exposures() =>

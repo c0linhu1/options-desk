@@ -15,12 +15,12 @@ public sealed record OptionQuote(
 public sealed record ChainRow(decimal Strike, OptionQuote Call, OptionQuote Put);
 
 /// <summary>
-/// A tradable instrument resolved to its underlying, mid, and per-share Greeks. <paramref name="Expiry"/> says
+/// A tradable instrument resolved to its underlying, mid, and per-share Greeks. <paramref name="ExpiryOutcome"/> says
 /// how an expired option settled; it's null for anything still trading.
 /// </summary>
 public sealed record InstrumentQuote(
     Underlying Underlying, OptionContract? Contract, decimal Mid,
-    double Delta, double Gamma, double Vega, double Theta, string? Expiry = null)
+    double Delta, double Gamma, double Vega, double Theta, string? ExpiryOutcome = null)
 {
     public bool IsOption => Contract is not null;
     public int Multiplier => Contract?.Multiplier ?? 1;
@@ -110,7 +110,7 @@ public class MarketDataService(DeskDbContext db, IValuationClock clock, IOptions
     /// <summary>
     /// The underlying's price options expiring on <paramref name="expiry"/> settle at. The desk keeps no price
     /// history, so the first time an expired contract is valued, the underlying's price then is recorded as its
-    /// settlement and used from then on: an expired option's value must stop following the stock.
+    /// settlement and used from then on, so whether an option was exercised can't change later.
     /// </summary>
     public decimal SettlementPrice(Underlying u, DateOnly expiry)
     {

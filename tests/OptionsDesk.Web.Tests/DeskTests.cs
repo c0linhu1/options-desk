@@ -176,9 +176,9 @@ public class ApiTests : IDisposable
         using var scope = _factory.Services.CreateScope();
         var positions = scope.ServiceProvider.GetRequiredService<PortfolioService>().Positions();
         Assert.Equal(228.50m - 200m, positions.Single(p => p.Symbol == itm).Mark); // exercised: spot less strike
-        Assert.Equal("exercised", positions.Single(p => p.Symbol == itm).Expiry);
+        Assert.Equal("exercised", positions.Single(p => p.Symbol == itm).ExpiryOutcome);
         Assert.Equal(0m, positions.Single(p => p.Symbol == otm).Mark);
-        Assert.Equal("expired worthless", positions.Single(p => p.Symbol == otm).Expiry);
+        Assert.Equal("expired worthless", positions.Single(p => p.Symbol == otm).ExpiryOutcome);
         Assert.Contains("expired worthless", await client.GetStringAsync("/Positions"));
     }
 
