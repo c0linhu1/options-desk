@@ -114,7 +114,7 @@ function init(form: HTMLFormElement): void {
         price: Number(price.value),
         account: account.value.trim(),
       });
-      const unit = ticketIsOption ? "contracts" : "shares";
+      const unit = isOptionSymbol(result.symbol) ? "contracts" : "shares";
       show(success, [
         `Booked #${result.tradeId}: ${side()} ${quantity.value} ${unit} ${result.symbol}, settles ${result.settleDate}`,
       ]);
