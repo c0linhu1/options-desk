@@ -25,3 +25,13 @@ export const OPTION_MULTIPLIER = 100;
 export function defaultQuantity(isOption: boolean): number {
   return isOption ? 10 : 100;
 }
+
+export function quantityUnit(isOption: boolean): string {
+  return isOption ? "contracts" : "shares";
+}
+
+/** The ticket's quantity after its instrument type is set. A change of type resets it to that type's
+ * default, since the old number meant something else; the same type keeps what the trader typed. */
+export function quantityForKind(current: string, wasOption: boolean, isOption: boolean): string {
+  return isOption === wasOption ? current : String(defaultQuantity(isOption));
+}

@@ -1,7 +1,7 @@
 // Trade ticket on the chain page: clicking a quote fills the ticket, the analytics panel shows
 // implied vol and Greeks at the entered price, and submitting books through the API.
 import { ApiError, bookTrade, impliedVol, type Side } from "./api.js";
-import { defaultQuantity, greek, isOptionSymbol, money, OPTION_MULTIPLIER, pct } from "./format.js";
+import { greek, isOptionSymbol, money, OPTION_MULTIPLIER, pct, quantityForKind, quantityUnit } from "./format.js";
 
 const form = document.querySelector<HTMLFormElement>("#ticket");
 if (form) init(form);
@@ -16,14 +16,13 @@ function init(form: HTMLFormElement): void {
   const errors = form.querySelector<HTMLElement>("#ticket-errors")!;
   const success = form.querySelector<HTMLElement>("#ticket-success")!;
   const submit = form.querySelector<HTMLButtonElement>("#ticket-submit")!;
-  const quantityUnit = form.querySelector<HTMLElement>("#ticket-quantity-unit")!;
+  const unitLabel = form.querySelector<HTMLElement>("#ticket-quantity-unit")!;
 
   // The quantity's unit depends on the instrument: contracts (x100 shares) for options, shares for stock.
-  // When the instrument type changes, the old number means something else, so reset it to that type's default.
   let ticketIsOption = true;
   function setInstrumentKind(isOption: boolean): void {
-    quantityUnit.textContent = isOption ? "(contracts)" : "(shares)";
-    if (isOption !== ticketIsOption) quantity.value = String(defaultQuantity(isOption));
+    unitLabel.textContent = `(${quantityUnit(isOption)})`;
+    quantity.value = quantityForKind(quantity.value, ticketIsOption, isOption);
     ticketIsOption = isOption;
   }
 
@@ -114,7 +113,7 @@ function init(form: HTMLFormElement): void {
         price: Number(price.value),
         account: account.value.trim(),
       });
-      const unit = isOptionSymbol(result.symbol) ? "contracts" : "shares";
+      const unit = quantityUnit(isOptionSymbol(result.symbol));
       show(success, [
         `Booked #${result.tradeId}: ${side()} ${quantity.value} ${unit} ${result.symbol}, settles ${result.settleDate}`,
       ]);
