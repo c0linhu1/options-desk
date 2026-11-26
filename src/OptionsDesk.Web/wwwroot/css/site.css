@@ -72,3 +72,53 @@ html {
   text-align: right;
   min-width: 6rem;
 }
+
+/* Vol smile chart on the chain page. */
+.smile-chart {
+  width: 100%;
+  height: 220px;
+  display: block;
+}
+
+.smile-chart .axis {
+  stroke: var(--bs-border-color);
+}
+
+.smile-chart text {
+  font-size: 11px;
+  fill: var(--bs-secondary-color);
+}
+
+.smile-chart .call,
+.smile-legend .call {
+  stroke: #0d6efd;
+  color: #0d6efd;
+}
+
+.smile-chart .put,
+.smile-legend .put {
+  stroke: #d63384;
+  color: #d63384;
+}
+
+.smile-chart .spot,
+.smile-legend .spot {
+  stroke: #6c757d;
+  color: #6c757d;
+  stroke-dasharray: 4 3;
+}
+
+.smile-chart .line {
+  fill: none;
+  stroke-width: 2;
+}
+
+.smile-chart .otm {
+  stroke: var(--bs-secondary-color);
+  stroke-opacity: 0.5;
+}
+
+.smile-chart circle {
+  fill: var(--bs-body-bg);
+  stroke-width: 1.5;
+}

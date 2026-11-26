@@ -38,6 +38,20 @@
 
 <div class="row">
     <div class="col-xl-9">
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between small">
+                <span>Implied vol smile &middot; @Model.Expiry.ToString("MMM dd")</span>
+                <span class="smile-legend"><span class="put">&#9644; OTM puts</span> <span class="call">&#9644; OTM calls</span> <span class="spot">&#9474; spot</span></span>
+            </div>
+            <div class="card-body p-2">
+                <svg id="smile-chart" class="smile-chart" role="img" aria-label="Implied volatility by strike"></svg>
+                <script type="application/json" id="smile-data">@Json.Serialize(new
+                {
+                    spot = u.Spot,
+                    points = Model.Rows.Select(r => new { strike = r.Strike, call = r.Call.Vol, put = r.Put.Vol }),
+                })</script>
+            </div>
+        </div>
         <table class="table table-sm table-desk chain">
             <thead>
                 <tr>
@@ -88,4 +102,5 @@
 
 @section Scripts {
     <script type="module" src="~/js/ticket.js" asp-append-version="true"></script>
+    <script type="module" src="~/js/smile.js" asp-append-version="true"></script>
 }
