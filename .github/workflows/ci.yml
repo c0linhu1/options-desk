@@ -27,6 +27,13 @@ jobs:
       - name: Test
         run: dotnet test --no-build -c Release --logger "trx;LogFileName=results.trx" --collect "XPlat Code Coverage"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test TypeScript (Node runs the .ts files directly)
+        run: node --test "tests/Scripts/*.test.ts"
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
