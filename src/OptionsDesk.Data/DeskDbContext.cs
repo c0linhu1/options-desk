@@ -6,6 +6,7 @@ public class DeskDbContext(DbContextOptions<DeskDbContext> options) : DbContext(
 {
     public DbSet<Underlying> Underlyings => Set<Underlying>();
     public DbSet<Trade> Trades => Set<Trade>();
+    public DbSet<Settlement> Settlements => Set<Settlement>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -31,6 +32,14 @@ public class DeskDbContext(DbContextOptions<DeskDbContext> options) : DbContext(
             e.HasIndex(t => t.Underlying);
             e.ToTable(t => t.HasCheckConstraint("CK_Trades_Quantity", "Quantity > 0"));
             e.Ignore(t => t.IsOption);
+        });
+
+        model.Entity<Settlement>(e =>
+        {
+            e.HasKey(s => new { s.Underlying, s.Expiry });
+            e.Property(s => s.Underlying).HasMaxLength(6);
+            e.Property(s => s.Price).HasPrecision(18, 4);
+            e.HasOne<Underlying>().WithMany().HasForeignKey(s => s.Underlying);
         });
     }
 }

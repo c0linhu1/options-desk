@@ -1,3 +1,6 @@
+using System.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OptionsDesk.Data;
 using OptionsDesk.Pricing;
 
@@ -15,15 +18,31 @@ public sealed record BookingResult(bool Booked, int? TradeId, string Symbol, Dat
 
 /// <summary>Validates a ticket, runs pre-trade risk against the current book, and books it.</summary>
 public class TradeBookingService(DeskDbContext db, MarketDataService market, PortfolioService portfolio,
-    RiskLimits limits, TimeProvider time)
+    RiskLimits limits, TimeProvider time, IOptions<DeskOptions> options)
 {
     public BookingResult Book(TradeTicket ticket, string trader)
+    {
+        // The risk check reads the whole book and the booking writes to it. Without one serializable transaction
+        // around both, simultaneous orders each see the book without the others and can jointly breach a limit.
+        // On SQLite this is BEGIN IMMEDIATE: it takes the write lock up front, so bookings run one at a time
+        // (others wait up to the command timeout) across every process sharing the database. Asking for
+        // Serializable explicitly keeps that guarantee on databases whose default isolation is weaker.
+        using var tx = db.Database.BeginTransaction(IsolationLevel.Serializable);
+        var result = BookInTransaction(ticket, trader);
+        if (result.Booked)
+            tx.Commit();
+        return result;
+    }
+
+    private BookingResult BookInTransaction(TradeTicket ticket, string trader)
     {
         var instrument = market.Resolve(ticket.Symbol);
         var symbol = instrument.Symbol;
         var tradeDate = ticket.TradeDate ?? market.Today;
-        if (instrument.Contract is { } c && tradeDate > c.Expiry)
-            return BookingResult.Rejected(symbol, [$"{symbol} expired on {c.Expiry:yyyy-MM-dd}"]);
+        // Resolve only accepts listed expiries, which are all after today, and the trade date can't be after today,
+        // so an option can't be booked on or after its expiry.
+        if (TradeDateProblem(tradeDate) is { } dateProblem)
+            return BookingResult.Rejected(symbol, [dateProblem]);
 
         Order order;
         try
@@ -63,5 +82,18 @@ public class TradeBookingService(DeskDbContext db, MarketDataService market, Por
         db.Trades.Add(trade);
         db.SaveChanges();
         return new BookingResult(true, trade.Id, symbol, trade.SettleDate, []);
+    }
+
+    private string? TradeDateProblem(DateOnly tradeDate)
+    {
+        var today = market.Today;
+        if (tradeDate > today)
+            return $"trade date {tradeDate:yyyy-MM-dd} is in the future";
+        if (!MarketCalendar.IsBusinessDay(tradeDate))
+            return $"trade date {tradeDate:yyyy-MM-dd} is not a business day";
+        var earliest = MarketCalendar.AddBusinessDays(today, -options.Value.MaxBackdateBusinessDays);
+        if (tradeDate < earliest)
+            return $"trade date {tradeDate:yyyy-MM-dd} is before the earliest allowed date {earliest:yyyy-MM-dd}";
+        return null;
     }
 }
