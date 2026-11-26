@@ -16,6 +16,8 @@
         <input class="form-control form-control-sm" name="trader" placeholder="Trader" value="@Model.Trader" />
         <button class="btn btn-sm btn-outline-primary" type="submit">Filter</button>
     </form>
+    <a class="btn btn-sm btn-outline-secondary ms-auto" asp-action="Export" asp-route-underlying="@Model.Underlying"
+       asp-route-trader="@Model.Trader">Export CSV</a>
 </div>
 
 @if (Model.Trades.Count == 0)
