@@ -29,6 +29,7 @@ src/
 tests/
   OptionsDesk.Pricing.Tests/   xUnit: pricing, calendar, symbology, positions, risk
   OptionsDesk.Web.Tests/       xUnit + WebApplicationFactory: pages, API, booking, antiforgery
+  Scripts/                     node:test: the TypeScript's logic (trade ticket)
 ```
 
 ## Running
@@ -42,7 +43,8 @@ dotnet run --project src/OptionsDesk.Web
 The app creates `desk.db` (SQLite) next to the project on first run and seeds eight underlyings.
 
 ```
-dotnet test                              # all tests
+dotnet test                              # all .NET tests
+node --test "tests/Scripts/*.test.ts"    # TypeScript tests (Node 23.6+, no packages to install)
 dotnet format --verify-no-changes        # what CI checks
 docker build -t options-desk . && docker run -p 8080:8080 options-desk
 ```
